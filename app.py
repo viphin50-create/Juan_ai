@@ -5,7 +5,7 @@ from groq import Groq
 from datetime import datetime
 
 # Настройки аватарок
-USER_AVATAR = "https://iimg.su/i/7LggqS"
+USER_AVATAR = "https://i.yapx.ru/Yif9K.jpg"
 BOT_AVATAR = "✨"
 
 # 1. ДИЗАЙН
