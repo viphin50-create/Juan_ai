@@ -9,15 +9,13 @@ AI_AVATAR = "https://r2.syntx.ai/mj/5069746049/single-7585790-1.png"
 
 st.set_page_config(page_title="Cipher", layout="centered")
 
-# Твой фирменный стиль
+# Дизайн
 st.markdown("""
     <style>
     header, footer, #MainMenu {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
     html, body, [class*="st-"] { font-family: 'Montserrat', sans-serif !important; font-size: 14px !important; }
     .stApp { background-color: #0a0a0a !important; color: #ffffff !important; }
-    [data-testid="stAvatar"] { display: none !important; }
-    div[data-testid="stChatMessage"] { padding: 8px !important; margin: 5px 0 !important; border-radius: 10px !important; }
     .stButton>button {
         width: 100% !important; background: rgba(255, 75, 75, 0.15) !important;
         border: 1px solid #ff4b4b !important; color: #ffffff !important;
@@ -27,7 +25,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. ПОДКЛЮЧЕНИЕ К БД
+# 2. ИНИЦИАЛИЗАЦИЯ БД
 @st.cache_resource
 def init_db():
     try:
@@ -36,54 +34,92 @@ def init_db():
             ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         )
         client = gspread.authorize(creds).open("Juan")
-        # Листы: 1-й для логов, Settings для героев, Users для истории диалогов
-        return client.get_worksheet(0), client.worksheet("Settings"), client.worksheet("Users")
-    except: return None, None, None
+        # Листы: Settings (герои), Users (история чата), Profiles (список юзеров)
+        return client.worksheet("Settings"), client.worksheet("Users")
+    except Exception as e:
+        st.error(f"Ошибка подключения к Google Sheets: {e}")
+        return None, None
 
-log_sheet, settings_sheet, users_sheet = init_db()
+settings_sheet, users_sheet = init_db()
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-if "app_state" not in st.session_state: st.session_state.app_state = "welcome"
+if "app_state" not in st.session_state: st.session_state.app_state = "user_select"
 
 st.markdown("<h3 style='text-align:center; color:#ff4b4b; letter-spacing:3px; margin:0;'>JUAN AI</h3>", unsafe_allow_html=True)
 
-# --- ШАГ 1: ВЫБОР ПОЛЬЗОВАТЕЛЯ ---
-if st.session_state.app_state == "welcome":
-    # Для простоты вводим имя вручную или выбираем из Users (колонка A)
-    u_name = st.text_input("Введи свой ник (для сохранения памяти)", placeholder="Например: vanya_dev")
-    if st.button("ВОЙТИ") and u_name:
-        st.session_state.u_name = u_name
-        st.session_state.app_state = "hero_select"
-        st.rerun()
+# --- ШАГ 1: ВЫБОР ИЛИ СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ ---
+if st.session_state.app_state == "user_select":
+    st.markdown("<p style='text-align:center;'>Кто заходит?</p>", unsafe_allow_html=True)
+    
+    # Получаем список уникальных юзеров из истории, если нет отдельного листа
+    existing_users = []
+    if users_sheet:
+        try:
+            data = users_sheet.get_all_records()
+            existing_users = list(set([str(row['user_id']) for row in data if row.get('user_id')]))
+        except: pass
+    
+    mode = st.radio("Действие", ["Выбрать профиль", "Создать профиль"], label_visibility="collapsed")
+    
+    if mode == "Выбрать профиль":
+        u_choice = st.selectbox("Твой аккаунт", existing_users if existing_users else ["Пока пусто"])
+        if st.button("ВОЙТИ") and u_choice != "Пока пусто":
+            st.session_state.u_name = u_choice
+            st.session_state.app_state = "hero_select"
+            st.rerun()
+    else:
+        new_u = st.text_input("Придумай ник")
+        if st.button("СОЗДАТЬ И ВОЙТИ") and new_u:
+            st.session_state.u_name = new_u
+            st.session_state.app_state = "hero_select"
+            st.rerun()
 
-# --- ШАГ 2: ВЫБОР ПАРТНЕРА + ЗАГРУЗКА ПАМЯТИ ---
+# --- ШАГ 2: ВЫБОР ИЛИ СОЗДАНИЕ ПАРТНЕРА ---
 elif st.session_state.app_state == "hero_select":
-    try:
+    st.markdown(f"<p style='text-align:center; font-size:12px;'>Юзер: {st.session_state.u_name}</p>", unsafe_allow_html=True)
+    
+    heroes = []
+    if settings_sheet:
         heroes = settings_sheet.get_all_records()
-        h_names = [h['partner_id'] for h in heroes] # Используем partner_id как в таблице
-        h_choice = st.selectbox("🎯 С кем на связь?", h_names)
+    
+    h_mode = st.radio("Партнер", ["Выбрать из списка", "Создать нового"], label_visibility="collapsed")
+    
+    if h_mode == "Выбрать из списка":
+        h_names = [h['partner_id'] for h in heroes] if heroes else []
+        h_choice = st.selectbox("С кем общаемся?", h_names if h_names else ["Нет героев"])
         
-        if st.button("НАЧАТЬ ЧАТ"):
+        if st.button("НАЧАТЬ ЧАТ") and h_choice != "Нет героев":
             h = next(i for i in heroes if i["partner_id"] == h_choice)
             st.session_state.current_name = h['partner_id']
             st.session_state.persona = f"Ты {h['partner_id']}. {h['system_prompt']}. Собеседник: {st.session_state.u_name}. Романтика, LGBT+, эмодзи."
             
-            # ЗАГРУЗКА ПАМЯТИ ИЗ ТАБЛИЦЫ USERS
+            # ЗАГРУЗКА ПАМЯТИ
             st.session_state.messages = []
             if users_sheet:
-                all_history = users_sheet.get_all_records()
-                # Фильтруем историю: только для этого юзера и этого партнера
-                personal_history = [
-                    {"role": row['role'], "content": row['content']} 
-                    for row in all_history 
-                    if str(row.get('user_id')) == st.session_state.u_name and str(row.get('partner_id')) == h_choice
-                ]
-                st.session_state.messages = personal_history[-10:] # Берем последние 10 сообщений
+                try:
+                    all_hist = users_sheet.get_all_records()
+                    personal = [
+                        {"role": r['role'], "content": r['content']} 
+                        for r in all_hist if str(r.get('user_id')) == st.session_state.u_name and str(r.get('partner_id')) == h_choice
+                    ]
+                    st.session_state.messages = personal[-15:] # Берем последние 15 фраз
+                except: pass
             
             st.session_state.app_state = "chat"
             st.rerun()
-    except Exception as e:
-        st.error(f"Ошибка при загрузке героев или памяти: {e}")
+    
+    else:
+        with st.form("new_hero_form"):
+            new_h_id = st.text_input("ID персонажа (латиницей, например: miguel)")
+            new_h_prompt = st.text_area("Характер и поведение")
+            if st.form_submit_button("СОЗДАТЬ ПАРТНЕРА"):
+                if settings_sheet and new_h_id:
+                    settings_sheet.append_row([new_h_id, new_h_id, new_h_prompt, "", "777", ""])
+                    st.success("Готово! Теперь выбери его в списке.")
+    
+    if st.button("⬅ Назад"):
+        st.session_state.app_state = "user_select"
+        st.rerun()
 
 # --- ШАГ 3: ЧАТ ---
 elif st.session_state.app_state == "chat":
@@ -94,28 +130,27 @@ elif st.session_state.app_state == "chat":
                 <img src="{AI_AVATAR}" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ff4b4b;">
                 <div>
                     <div style="color: #ff4b4b; font-size: 14px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
-                    <div style="font-size: 9px; color: #00ff00;">В СЕТИ</div>
+                    <div style="font-size: 9px; color: #00ff00;"><span class="status-dot"></span>В СЕТИ</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
     with col2:
-        if st.button("ВЫЙТИ"):
+        if st.button("ВЫХОД"):
             st.session_state.app_state = "hero_select"
             st.rerun()
 
     for m in st.session_state.messages:
         with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if p := st.chat_input("Напиши сообщение..."):
-        # 1. Отображаем и сохраняем локально
+    if p := st.chat_input("Твое сообщение..."):
         st.session_state.messages.append({"role": "user", "content": p})
         with st.chat_message("user"): st.markdown(p)
         
-        # 2. Сохраняем в таблицу Users (БД)
+        # Запись в БД (User)
         if users_sheet:
             users_sheet.append_row([st.session_state.u_name, st.session_state.current_name, "user", p, datetime.now().strftime("%Y-%m-%d %H:%M")])
 
-        # 3. Ответ ИИ
+        # Ответ ИИ
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
@@ -125,6 +160,6 @@ elif st.session_state.app_state == "chat":
         with st.chat_message("assistant"): st.markdown(ans)
         st.session_state.messages.append({"role": "assistant", "content": ans})
         
-        # 4. Сохраняем ответ ИИ в таблицу Users (БД)
+        # Запись в БД (AI)
         if users_sheet:
             users_sheet.append_row([st.session_state.u_name, st.session_state.current_name, "assistant", ans, datetime.now().strftime("%Y-%m-%d %H:%M")])
