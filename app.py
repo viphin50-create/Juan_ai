@@ -4,7 +4,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# Прямая ссылка на фото
+# Прямая ссылка на фото (если эта не сработает, значит хостинг блокирует встраивание)
 USER_PHOTO = "https://i.yapx.ru/Yif9K.jpg"
 
 # 1. ДИЗАЙН
@@ -40,10 +40,9 @@ st.markdown("""
         font-weight: 600;
         margin-top: 10px;
     }
-    .stTextInput>div>div>input {
-        background-color: rgba(255,255,255,0.05) !important;
-        color: white !important;
-    }
+    /* Скрываем стандартные аватарки и метки ролей */
+    [data-testid="stChatMessage"] [data-testid="stAvatar"] { display: none !important; }
+    [data-testid="stChatMessage"] { padding-left: 0 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -76,7 +75,6 @@ if st.session_state.app_state == "welcome":
 elif st.session_state.app_state == "user_select":
     st.markdown("<div class='welcome-card'><h3>КТО В СЕТИ?</h3></div>", unsafe_allow_html=True)
     
-    # Сначала пробуем получить список пользователей
     u_names = []
     if users_sheet:
         try:
@@ -84,38 +82,35 @@ elif st.session_state.app_state == "user_select":
             u_names = [u['Name'] for u in u_data]
         except: pass
 
-    # Разделяем логику Входа и Регистрации четко через табы
     tab_login, tab_reg = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
 
     with tab_login:
         if u_names:
-            sel_u = st.selectbox("Твой профиль:", u_names, key="login_select")
-            if st.button("ПОДТВЕРДИТЬ ВХОД"):
+            sel_u = st.selectbox("Твой профиль:", u_names, key="sel_key")
+            if st.button("ПОДТВЕРДИТЬ ВХОД", key="btn_login"):
                 st.session_state.u_name = sel_u
                 st.session_state.app_state = "hero_select"
                 st.rerun()
         else:
-            st.write("Список пуст. Создай профиль!")
+            st.info("Список пуст.")
 
     with tab_reg:
-        new_n = st.text_input("Как тебя называть?", key="reg_name")
-        new_b = st.text_area("Пару слов о тебе (для памяти ИИ)", key="reg_bio")
-        if st.button("СОЗДАТЬ И ВОЙТИ"):
+        new_n = st.text_input("Как тебя называть?", key="reg_n")
+        new_b = st.text_area("Пару слов о тебе", key="reg_b")
+        if st.button("СОЗДАТЬ И ВОЙТИ", key="btn_reg"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
                 st.session_state.app_state = "hero_select"
                 st.rerun()
-            else:
-                st.error("Введи хотя бы имя!")
 
 elif st.session_state.app_state == "hero_select":
-    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name}</h3><p>Выбери личность:</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name}</h3></div>", unsafe_allow_html=True)
     if settings_sheet:
         h_data = settings_sheet.get_all_records()
         h_names = [h['Name'] for h in h_data]
-        sel_h = st.selectbox("Контакт:", h_names)
-        if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
+        sel_h = st.selectbox("С кем общаемся?", h_names, key="h_sel")
+        if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ", key="h_btn"):
             h = next(i for i in h_data if i["Name"] == sel_h)
             st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}."
             st.session_state.current_name = h['Name']
@@ -123,32 +118,39 @@ elif st.session_state.app_state == "hero_select":
             st.rerun()
 
 elif st.session_state.app_state == "chat":
-    # Твой стильный хедер с аватаркой
+    # Хедер с аватаркой (увеличен размер)
     st.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 25px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 20px;">
-            <img src="{USER_PHOTO}" style="width: 55px; height: 55px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
-            <div style="text-align: left;">
-                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 11px;">● В СЕТИ</div>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; margin-bottom: 30px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 25px; border: 1px solid rgba(255,75,75,0.2);">
+            <img src="{USER_PHOTO}" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #ff4b4b; object-fit: cover; display: block;">
+            <div style="text-align: center;">
+                <div style="color: #ff4b4b; font-size: 20px; font-weight: 600; letter-spacing: 2px;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 12px; font-weight: 300;">● В СЕТИ</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
     
     if "messages" not in st.session_state: st.session_state.messages = []
+    
+    # Вывод сообщений с иконками вместо текста
     for m in st.session_state.messages:
-        with st.chat_message(m["role"]): st.markdown(m["content"])
+        icon = "👤" if m["role"] == "user" else "✨"
+        with st.chat_message(m["role"]):
+            st.markdown(f"**{icon}** {m['content']}")
     
     if p := st.chat_input("Напиши сообщение..."):
         st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"): st.markdown(p)
+        with st.chat_message("user"):
+            st.markdown(f"**👤** {p}")
         
         res = gro_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
         )
         ans = res.choices[0].message.content
-        with st.chat_message("assistant"): st.markdown(ans)
+        with st.chat_message("assistant"):
+            st.markdown(f"**✨** {ans}")
         st.session_state.messages.append({"role": "assistant", "content": ans})
+        
         if sheet:
             try: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
             except: pass
