@@ -24,7 +24,7 @@ st.markdown("""
     .welcome-card {
         background: rgba(36, 47, 61, 0.2);
         backdrop-filter: blur(20px);
-        padding: 40px;
+        padding: 30px;
         border-radius: 30px;
         border: 1px solid rgba(255, 0, 0, 0.3);
         text-align: center;
@@ -38,12 +38,11 @@ st.markdown("""
         border-radius: 15px;
         padding: 10px;
         font-weight: 600;
+        margin-top: 10px;
     }
-    /* Стили для вводов текста, чтобы их было видно */
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+    .stTextInput>div>div>input {
         background-color: rgba(255,255,255,0.05) !important;
         color: white !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -58,8 +57,7 @@ def init_db():
         )
         client = gspread.authorize(creds).open("Juan")
         return client.get_worksheet(0), client.worksheet("Settings"), client.worksheet("Users")
-    except Exception as e:
-        st.error(f"Ошибка БД: {e}")
+    except:
         return None, None, None
 
 sheet, settings_sheet, users_sheet = init_db()
@@ -68,14 +66,9 @@ gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "app_state" not in st.session_state:
     st.session_state.app_state = "welcome"
 
-# 3. ЛОГИКА ЭКРАНОВ
+# 3. ЛОГИКА
 if st.session_state.app_state == "welcome":
-    st.markdown("""
-        <div class='welcome-card'>
-            <h1 style='letter-spacing: 5px; color: #ff4b4b;'>JUAN AI</h1>
-            <p style='opacity: 0.6;'>Система находится в режиме ожидания...</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
     if st.button("РАЗБУДИТЬ"):
         st.session_state.app_state = "user_select"
         st.rerun()
@@ -83,54 +76,54 @@ if st.session_state.app_state == "welcome":
 elif st.session_state.app_state == "user_select":
     st.markdown("<div class='welcome-card'><h3>КТО В СЕТИ?</h3></div>", unsafe_allow_html=True)
     
-    t1, t2 = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
-    
-    with t1:
-        u_names = []
-        if users_sheet:
-            try:
-                u_data = users_sheet.get_all_records()
-                u_names = [u['Name'] for u in u_data]
-            except: pass
-            
+    # Сначала пробуем получить список пользователей
+    u_names = []
+    if users_sheet:
+        try:
+            u_data = users_sheet.get_all_records()
+            u_names = [u['Name'] for u in u_data]
+        except: pass
+
+    # Разделяем логику Входа и Регистрации четко через табы
+    tab_login, tab_reg = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
+
+    with tab_login:
         if u_names:
-            sel_u = st.selectbox("Выбери профиль:", u_names)
-            if st.button("ПОДТВЕРДИТЬ"):
+            sel_u = st.selectbox("Твой профиль:", u_names, key="login_select")
+            if st.button("ПОДТВЕРДИТЬ ВХОД"):
                 st.session_state.u_name = sel_u
                 st.session_state.app_state = "hero_select"
                 st.rerun()
         else:
-            st.info("Пользователей пока нет. Зарегистрируйся в соседней вкладке.")
+            st.write("Список пуст. Создай профиль!")
 
-    with t2:
-        new_n = st.text_input("Никнейм")
-        new_b = st.text_area("О себе")
-        if st.button("СОЗДАТЬ"):
+    with tab_reg:
+        new_n = st.text_input("Как тебя называть?", key="reg_name")
+        new_b = st.text_area("Пару слов о тебе (для памяти ИИ)", key="reg_bio")
+        if st.button("СОЗДАТЬ И ВОЙТИ"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
                 st.session_state.app_state = "hero_select"
                 st.rerun()
-            elif not new_n:
-                st.warning("Введи имя!")
+            else:
+                st.error("Введи хотя бы имя!")
 
 elif st.session_state.app_state == "hero_select":
-    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name}</h3></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name}</h3><p>Выбери личность:</p></div>", unsafe_allow_html=True)
     if settings_sheet:
-        try:
-            heroes_data = settings_sheet.get_all_records()
-            h_names = [h['Name'] for h in heroes_data]
-            sel_h = st.selectbox("С кем связываемся?", h_names)
-            if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
-                h = next(i for i in heroes_data if i["Name"] == sel_h)
-                st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}."
-                st.session_state.current_name = h['Name']
-                st.session_state.app_state = "chat"
-                st.rerun()
-        except:
-            st.error("Не удалось загрузить персонажей.")
+        h_data = settings_sheet.get_all_records()
+        h_names = [h['Name'] for h in h_data]
+        sel_h = st.selectbox("Контакт:", h_names)
+        if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
+            h = next(i for i in h_data if i["Name"] == sel_h)
+            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}."
+            st.session_state.current_name = h['Name']
+            st.session_state.app_state = "chat"
+            st.rerun()
 
 elif st.session_state.app_state == "chat":
+    # Твой стильный хедер с аватаркой
     st.markdown(f"""
         <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 25px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 20px;">
             <img src="{USER_PHOTO}" style="width: 55px; height: 55px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
