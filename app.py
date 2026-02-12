@@ -156,4 +156,15 @@ elif st.session_state.app_state == "chat":
         st.session_state.messages.append({"role": "user", "content": p})
         with st.chat_message("user"): st.markdown(p)
         
-        res =
+        res = gro_client.chat.completions.create(
+            model="llama-3.3-70b-versatile", 
+            messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
+        )
+        ans = res.choices[0].message.content
+        with st.chat_message("assistant"): st.markdown(ans)
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+        if log_sheet: log_sheet.append_row([datetime.now().strftime("%H:%M"), h_n, p, ans[:200]])
+
+    if st.button("⬅️ ВЫХОД"):
+        st.session_state.app_state = "welcome"
+        st.rerun()
