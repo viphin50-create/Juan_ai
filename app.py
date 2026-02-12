@@ -4,124 +4,117 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
+# 1. СТИЛЬ И МОБИЛЬНАЯ ВЕРСТКА
 st.set_page_config(page_title="AI Companion", page_icon="🎭", layout="centered")
 
-# 2. ДИЗАЙН (CSS) - Телефонный стиль
 st.markdown("""
     <style>
-    header {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
-    .stApp { background-color: #121212; color: #FFFFFF; }
+    /* Скрываем всё лишнее */
+    header, footer, #MainMenu {visibility: hidden !important;}
     
-    /* Стили сообщений */
-    .stChatMessage {
-        border-radius: 20px;
-        padding: 10px;
-        margin-bottom: 10px;
-        max-width: 85%;
-    }
-    .stChatMessage[data-testid="stChatMessageUser"] {
-        background-color: #0088cc !important;
-        margin-left: auto;
-    }
-    .stChatMessage[data-testid="stChatMessageAssistant"] {
-        background-color: #2b2b2b !important;
-        margin-right: auto;
+    .stApp { background-color: #0E1117; }
+    
+    /* Контейнер настроек сверху */
+    .setting-box {
+        background-color: #1A1C23;
+        border-radius: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border: 1px solid #30363D;
     }
     
-    /* Скрытие лишнего белого фона вокруг текста */
-    .stMarkdown p { color: white !important; font-size: 16px; }
-    
-    /* Кастомная кнопка настройки */
-    .stButton>button {
-        width: 100%;
-        border-radius: 12px;
-        background-color: #1f1f1f;
-        color: white;
-        border: 1px solid #333;
+    /* Пузыри чата */
+    .stChatMessage { border-radius: 18px !important; margin-bottom: 10px !important; }
+    div[data-testid="stChatMessageUser"] {
+        background-color: #0088CC !important;
+        color: white !important;
+        border-bottom-right-radius: 2px !important;
     }
+    div[data-testid="stChatMessageAssistant"] {
+        background-color: #21262D !important;
+        color: white !important;
+        border-bottom-left-radius: 2px !important;
+    }
+    
+    /* Исправляем белый текст */
+    .stMarkdown p { color: #E6EDF3 !important; font-size: 16px; }
     </style>
     """, unsafe_allow_html=True)
 
-# Функция для озвучки (JavaScript)
+# 2. УЛУЧШЕННЫЙ ЖИВОЙ ГОЛОС (JS)
 def speak_text(text):
     if text:
+        # Улучшенный скрипт: выбирает премиальный мужской голос, если он есть в системе
         js_code = f"""
         <script>
+        window.speechSynthesis.cancel();
         var msg = new SpeechSynthesisUtterance();
         msg.text = "{text.replace('"', "'")}";
         msg.lang = 'ru-RU';
         msg.rate = 1.0;
+        msg.pitch = 0.9; // Чуть ниже тон для мужественности
+        
+        var voices = window.speechSynthesis.getVoices();
+        // Пытаемся найти более живой голос (например, Google Russian или Microsoft Pavel)
+        for(var i = 0; i < voices.length; i++) {{
+            if(voices[i].name.includes('Google') || voices[i].name.includes('Male')) {{
+                msg.voice = voices[i];
+                break;
+            }}
+        }}
         window.speechSynthesis.speak(msg);
         </script>
         """
         st.components.v1.html(js_code, height=0)
 
-# 3. ИНИЦИАЛИЗАЦИЯ БАЗЫ
+# 3. ПОДКЛЮЧЕНИЕ ТАБЛИЦЫ
 def init_db():
     try:
         info = st.secrets["gcp_service_account"]
-        creds_dict = {
-            "type": info["type"], "project_id": info["project_id"],
-            "private_key_id": info["private_key_id"], "private_key": info["private_key"].replace("\\n", "\n"),
-            "client_email": info["client_email"], "client_id": info["client_id"],
-            "auth_uri": info["auth_uri"], "token_uri": info["token_uri"],
-            "auth_provider_x509_cert_url": info["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": info["client_x509_cert_url"]
-        }
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(info, [
+            "https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"
+        ])
         client = gspread.authorize(creds).open("Juan")
         return client.get_worksheet(0), client.worksheet("Settings")
-    except:
-        return None, None
+    except: return None, None
 
-log_sheet, settings_sheet = init_db()
+sheet, settings_sheet = init_db()
 gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 4. МЕНЮ НАСТРОЕК (В САЙДБАРЕ)
-with st.sidebar:
-    st.title("⚙️ Настройки")
-    
+# 4. ВЕРХНЯЯ ПАНЕЛЬ НАСТРОЕК (Вместо сайдбара)
+with st.expander("👤 Настроить партнера", expanded=False):
     if settings_sheet:
-        all_data = settings_sheet.get_all_records()
-        names = [row['Name'] for row in all_data] if all_data else []
+        data = settings_sheet.get_all_records()
+        names = [r['Name'] for r in data]
         
-        mode = st.radio("Режим", ["Выбрать партнера", "Создать нового"])
+        col1, col2 = st.columns(2)
+        with col1:
+            mode = st.selectbox("Режим", ["Выбор", "Создание"])
         
-        if mode == "Выбрать партнера" and names:
-            selected_name = st.selectbox("Твой выбор:", names)
-            current_p = next(item for item in all_data if item["Name"] == selected_name)
-            st.session_state.persona = f"Ты {current_p['Name']}, возраст {current_p['Age']}. Твоя биография: {current_p['Prompt']}. Общайся в этом стиле."
-            st.success(f"Активен: {selected_name}")
-            
-        elif mode == "Создать нового":
-            new_name = st.text_input("Имя")
-            new_age = st.number_input("Возраст", 18, 99, 25)
-            new_bio = st.text_area("Биография/Характер")
-            if st.button("Создать и Обучить"):
-                settings_sheet.append_row([new_name, new_bio, new_age])
-                st.success("Персонаж создан! Переключись в 'Выбрать партнера'")
+        if mode == "Выбор" and names:
+            sel = st.selectbox("Кто сегодня с тобой?", names)
+            curr = next(i for i in data if i["Name"] == sel)
+            st.session_state.persona = f"Ты {curr['Name']}, возраст {curr['Age']}. {curr['Prompt']}"
+            st.info(f"Активен: {sel}")
+        else:
+            n = st.text_input("Имя")
+            a = st.number_input("Возраст", 18, 99, 25)
+            b = st.text_area("Характер (био)")
+            if st.button("✅ Сохранить личность"):
+                settings_sheet.append_row([n, b, a])
+                st.success("Готово! Переключись на 'Выбор'")
 
-# 5. ОСНОВНОЙ ЧАТ
-if "persona" not in st.session_state:
-    st.session_state.persona = "Ты — Хуан, лаконичный партнер."
-
+# 5. ЧАТ
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-# Приветствие
-if not st.session_state.messages:
-    with st.chat_message("assistant"):
-        msg = "Привет! Я готов. Настрой меня в меню слева или просто начнем общение."
-        st.markdown(msg)
+if "persona" not in st.session_state:
+    st.session_state.persona = "Ты — Хуан, партнер."
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-if prompt := st.chat_input("Сообщение..."):
+if prompt := st.chat_input("Напиши мне..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -135,11 +128,9 @@ if prompt := st.chat_input("Сообщение..."):
         
         with st.chat_message("assistant"):
             st.markdown(ans)
-            speak_text(ans) # Озвучка
+            speak_text(ans)
             
         st.session_state.messages.append({"role": "assistant", "content": ans})
-        
-        if log_sheet:
-            log_sheet.append_row([datetime.now().strftime("%H:%M"), "Chat", prompt, ans[:100]])
+        if sheet: sheet.append_row([datetime.now().strftime("%H:%M"), "Chat", prompt, ans[:100]])
     except Exception as e:
         st.error(f"Ошибка: {e}")
