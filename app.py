@@ -4,7 +4,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# Прямая ссылка на фото (если эта не сработает, значит хостинг блокирует встраивание)
+# Прямая ссылка на фото (проверь, чтобы она открывалась в браузере как картинка)
 USER_PHOTO = "https://i.yapx.ru/Yif9K.jpg"
 
 # 1. ДИЗАЙН
@@ -30,6 +30,7 @@ st.markdown("""
         text-align: center;
         margin-top: 50px;
     }
+    /* Кнопки */
     .stButton>button {
         width: 100%;
         background: rgba(255, 75, 75, 0.1) !important;
@@ -40,9 +41,24 @@ st.markdown("""
         font-weight: 600;
         margin-top: 10px;
     }
-    /* Скрываем стандартные аватарки и метки ролей */
+    /* УБИРАЕМ АРТ И ФЕЙС (скрываем дефолтные аватарки полностью) */
     [data-testid="stChatMessage"] [data-testid="stAvatar"] { display: none !important; }
     [data-testid="stChatMessage"] { padding-left: 0 !important; }
+    
+    /* Компактный хедер */
+    .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 20px;
+        border: 1px solid rgba(255, 75, 75, 0.2);
+        margin-bottom: 25px;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,14 +83,13 @@ if "app_state" not in st.session_state:
 
 # 3. ЛОГИКА
 if st.session_state.app_state == "welcome":
-    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b; letter-spacing: 3px;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
     if st.button("РАЗБУДИТЬ"):
         st.session_state.app_state = "user_select"
         st.rerun()
 
 elif st.session_state.app_state == "user_select":
     st.markdown("<div class='welcome-card'><h3>КТО В СЕТИ?</h3></div>", unsafe_allow_html=True)
-    
     u_names = []
     if users_sheet:
         try:
@@ -83,21 +98,17 @@ elif st.session_state.app_state == "user_select":
         except: pass
 
     tab_login, tab_reg = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
-
     with tab_login:
         if u_names:
-            sel_u = st.selectbox("Твой профиль:", u_names, key="sel_key")
-            if st.button("ПОДТВЕРДИТЬ ВХОД", key="btn_login"):
+            sel_u = st.selectbox("Твой профиль:", u_names, key="login_sel")
+            if st.button("ПОДТВЕРДИТЬ ВХОД"):
                 st.session_state.u_name = sel_u
                 st.session_state.app_state = "hero_select"
                 st.rerun()
-        else:
-            st.info("Список пуст.")
-
     with tab_reg:
-        new_n = st.text_input("Как тебя называть?", key="reg_n")
+        new_n = st.text_input("Никнейм", key="reg_n")
         new_b = st.text_area("Пару слов о тебе", key="reg_b")
-        if st.button("СОЗДАТЬ И ВОЙТИ", key="btn_reg"):
+        if st.button("СОЗДАТЬ И ВОЙТИ"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
@@ -110,7 +121,7 @@ elif st.session_state.app_state == "hero_select":
         h_data = settings_sheet.get_all_records()
         h_names = [h['Name'] for h in h_data]
         sel_h = st.selectbox("С кем общаемся?", h_names, key="h_sel")
-        if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ", key="h_btn"):
+        if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
             h = next(i for i in h_data if i["Name"] == sel_h)
             st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}."
             st.session_state.current_name = h['Name']
@@ -118,20 +129,20 @@ elif st.session_state.app_state == "hero_select":
             st.rerun()
 
 elif st.session_state.app_state == "chat":
-    # Хедер с аватаркой (увеличен размер)
+    # НОВЫЙ КОМПАКТНЫЙ ХЕДЕР: ФОТО СБОКУ ОТ ИМЕНИ
     st.markdown(f"""
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; margin-bottom: 30px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 25px; border: 1px solid rgba(255,75,75,0.2);">
-            <img src="{USER_PHOTO}" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #ff4b4b; object-fit: cover; display: block;">
-            <div style="text-align: center;">
-                <div style="color: #ff4b4b; font-size: 20px; font-weight: 600; letter-spacing: 2px;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 12px; font-weight: 300;">● В СЕТИ</div>
+        <div class="chat-header">
+            <img src="{USER_PHOTO}" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
+            <div style="text-align: left;">
+                <div style="color: #ff4b4b; font-size: 18px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 10px; letter-spacing: 1px;">● В СЕТИ</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
     
     if "messages" not in st.session_state: st.session_state.messages = []
     
-    # Вывод сообщений с иконками вместо текста
+    # Чат с иконками без текста "art/face"
     for m in st.session_state.messages:
         icon = "👤" if m["role"] == "user" else "✨"
         with st.chat_message(m["role"]):
