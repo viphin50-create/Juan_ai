@@ -4,8 +4,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# ПРЯМАЯ ССЫЛКА (Исправил кавычку)
-USER_PHOTO = "https://cdn.midjourney.com/u/3e5aa158-179e-48aa-88b0-bbef6bb9e7a0/0e909883da6dc88b440ea65fc9c9249352270c36a3b71af9f7744cf2b3d43381.png"
+# ПРЯМАЯ ССЫЛКА (надежная из Midjourney)
+USER_PHOTO = "hhttps://r2.syntx.ai/mj/5069746049/single-7585790-1.png"
 
 # 1. ДИЗАЙН
 st.set_page_config(page_title="Cipher", layout="centered")
@@ -21,6 +21,14 @@ st.markdown("""
         background-image: radial-gradient(circle at 20% 30%, rgba(255, 0, 0, 0.1) 0%, transparent 50%) !important;
         color: white !important;
     }
+    /* ЖЕСТКАЯ ЗАЧИСТКА FACE И ART */
+    div[data-testid="stChatMessage"] [data-testid="stAvatar"] { display: none !important; }
+    div[data-testid="stChatMessage"] { padding-left: 0 !important; margin-left: 0 !important; }
+    div[data-testid="stChatMessage"] p { font-size: 16px !important; }
+    
+    /* Стилизация бабблов, чтобы скрыть текст-заменитель */
+    .stChatMessage { background-color: transparent !important; border: none !important; }
+
     .welcome-card {
         background: rgba(36, 47, 61, 0.2);
         backdrop-filter: blur(20px);
@@ -36,27 +44,19 @@ st.markdown("""
         border: 1px solid rgba(255, 75, 75, 0.6) !important;
         color: white !important;
         border-radius: 12px;
-        padding: 8px;
-        font-weight: 600;
     }
-    /* ЖЕСТКОЕ УДАЛЕНИЕ FACE И ART */
-    [data-testid="stChatMessage"] [data-testid="stAvatar"] { display: none !important; }
-    [data-testid="stChatMessage"] { padding-left: 0 !important; }
     
-    /* Компактный хедер с фото сбоку */
+    /* Компактный хедер */
     .chat-header {
         display: flex;
         align-items: center;
-        justify-content: center;
         gap: 15px;
-        padding: 12px;
+        padding: 10px 20px;
         background: rgba(255, 255, 255, 0.03);
-        border-radius: 20px;
+        border-radius: 50px;
         border: 1px solid rgba(255, 75, 75, 0.2);
         margin-bottom: 20px;
         width: fit-content;
-        margin-left: auto;
-        margin-right: auto;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -81,91 +81,90 @@ if "app_state" not in st.session_state:
 
 # 3. ЛОГИКА
 if st.session_state.app_state == "welcome":
-    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='welcome-card'><h1 style='color:#ff4b4b;'>JUAN AI</h1><p>Система ждет...</p></div>", unsafe_allow_html=True)
     if st.button("РАЗБУДИТЬ"):
         st.session_state.app_state = "user_select"
         st.rerun()
 
 elif st.session_state.app_state == "user_select":
-    st.markdown("<div class='welcome-card'><h3>КТО В СЕТИ?</h3></div>", unsafe_allow_html=True)
-    u_names = []
-    if users_sheet:
-        try:
-            u_data = users_sheet.get_all_records()
-            u_names = [u['Name'] for u in u_data]
-        except: pass
-
-    tab_login, tab_reg = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
-    with tab_login:
-        if u_names:
-            sel_u = st.selectbox("Выбери профиль:", u_names, key="login_dropdown")
-            if st.button("ВОЙТИ", key="login_btn"):
-                st.session_state.u_name = sel_u
-                st.session_state.app_state = "hero_select"
-                st.rerun()
-        else: st.write("Нет активных профилей.")
-
-    with tab_reg:
-        new_n = st.text_input("Имя нового парня", key="reg_name_input")
-        new_b = st.text_area("О нем", key="reg_bio_input")
-        if st.button("СОЗДАТЬ ПРОФИЛЬ", key="reg_submit_btn"):
+    st.markdown("<div class='welcome-card'><h3>КТО ТЫ?</h3></div>", unsafe_allow_html=True)
+    
+    # Прямая форма регистрации выше табов для надежности
+    with st.expander("✨ СОЗДАТЬ НОВОГО ПАРНЯ", expanded=True):
+        new_n = st.text_input("Имя", key="reg_n")
+        new_b = st.text_area("О нем", key="reg_b")
+        if st.button("ЗАРЕГИСТРИРОВАТЬ"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
                 st.session_state.app_state = "hero_select"
                 st.rerun()
 
+    st.divider()
+    
+    u_names = []
+    if users_sheet:
+        u_data = users_sheet.get_all_records()
+        u_names = [u['Name'] for u in u_data]
+    
+    if u_names:
+        sel_u = st.selectbox("Или выбери существующего:", u_names)
+        if st.button("ВОЙТИ"):
+            st.session_state.u_name = sel_u
+            st.session_state.app_state = "hero_select"
+            st.rerun()
+
 elif st.session_state.app_state == "hero_select":
-    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name} 👋</h3></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='welcome-card'><h3>ПРИВЕТ, {st.session_state.u_name} 👋</h3><p>С кем хочешь поговорить?</p></div>", unsafe_allow_html=True)
     if settings_sheet:
         h_data = settings_sheet.get_all_records()
-        h_names = [h['Name'] for h in h_data]
-        sel_h = st.selectbox("С кем общаемся?", h_names, key="hero_dropdown")
+        sel_h = st.selectbox("Контакт:", [h['Name'] for h in h_data])
         if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
             h = next(i for i in h_data if i["Name"] == sel_h)
-            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ОБЯЗАТЕЛЬНО используй много эмодзи! ✨⚡️"
+            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ПИШИ С ЭМОДЗИ! ✨"
             st.session_state.current_name = h['Name']
             st.session_state.app_state = "chat"
             st.rerun()
 
 elif st.session_state.app_state == "chat":
-    # Компактный хедер: Фото слева, имя справа
+    # КНОПКА ЗАВЕРШЕНИЯ В БОКУ
+    with st.sidebar:
+        st.title("УПРАВЛЕНИЕ")
+        st.write(f"Собеседник: **{st.session_state.u_name}**")
+        if st.button("🔚 ЗАВЕРШИТЬ СЕАНС"):
+            st.session_state.app_state = "welcome"
+            st.rerun()
+
+    # Хедер чата
     st.markdown(f"""
-        <div class="chat-header">
-            <img src="{USER_PHOTO}" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
+        <center><div class="chat-header">
+            <img src="{USER_PHOTO}" style="width: 45px; height: 45px; border-radius: 50%; border: 2px solid #ff4b4b;">
             <div style="text-align: left;">
-                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600; letter-spacing: 1px;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 10px; opacity: 0.8;">● В СЕТИ</div>
+                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 9px;">● ONLINE</div>
             </div>
-        </div>
+        </div></center>
     """, unsafe_allow_html=True)
     
     if "messages" not in st.session_state: st.session_state.messages = []
     
     for m in st.session_state.messages:
-        # Иконки вместо текста face/art
-        icon = "👤" if m["role"] == "user" else "✨"
+        ico = "👤" if m["role"] == "user" else "✨"
         with st.chat_message(m["role"]):
-            st.markdown(f"**{icon}** {m['content']}")
+            st.markdown(f"**{ico}** {m['content']}")
     
     if p := st.chat_input("Напиши сообщение... 💭"):
         st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"):
-            st.markdown(f"**👤** {p}")
+        with st.chat_message("user"): st.markdown(f"👤 {p}")
         
         res = gro_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
         )
         ans = res.choices[0].message.content
-        with st.chat_message("assistant"):
-            st.markdown(f"**✨** {ans}")
+        with st.chat_message("assistant"): st.markdown(f"✨ {ans}")
         st.session_state.messages.append({"role": "assistant", "content": ans})
         
         if sheet: 
             try: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
             except: pass
-
-    if st.button("ЗАВЕРШИТЬ СЕАНС"):
-        st.session_state.app_state = "welcome"
-        st.rerun()
