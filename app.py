@@ -4,12 +4,12 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# Настройки аватарок
-USER_AVATAR = "https://i.yapx.ru/Yif9K.jpg"
-BOT_AVATAR = "✨"
+# Прямая ссылка на фото для хедера
+USER_PHOTO = "https://i.yapx.ru/Yif9K.jpg"
 
-# 1. ДИЗАЙН
+# 1. ДИЗАЙН (Montserrat + Neon)
 st.set_page_config(page_title="Cipher", layout="centered")
+
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 
 st.markdown("""
@@ -23,38 +23,33 @@ st.markdown("""
         color: white !important;
     }
     .welcome-card {
-        background: rgba(36, 47, 61, 0.4);
-        backdrop-filter: blur(15px);
-        padding: 20px;
-        border-radius: 20px;
-        border: 1px solid rgba(255, 0, 0, 0.2);
+        background: rgba(36, 47, 61, 0.2);
+        backdrop-filter: blur(20px);
+        padding: 40px;
+        border-radius: 30px;
+        border: 1px solid rgba(255, 0, 0, 0.3);
         text-align: center;
-        margin-bottom: 20px;
+        margin-top: 50px;
+        box-shadow: 0 0 30px rgba(255, 0, 0, 0.1);
     }
     .stButton>button {
         width: 100%;
-        background: transparent !important;
+        background: rgba(255, 75, 75, 0.1) !important;
         border: 1px solid rgba(255, 75, 75, 0.6) !important;
         color: white !important;
-        border-radius: 12px;
+        border-radius: 15px;
+        padding: 10px;
+        font-weight: 600;
+        transition: 0.3s;
     }
-    div[data-testid="stChatMessageUser"] { 
-        background: rgba(43, 82, 120, 0.6) !important; 
-        border-radius: 15px 15px 2px 15px !important; 
-    }
-    div[data-testid="stChatMessageAssistant"] { 
-        background: rgba(28, 39, 50, 0.7) !important; 
-        border-radius: 15px 15px 15px 2px !important; 
-        border: 0.5px solid rgba(255, 0, 0, 0.15) !important; 
-    }
-    [data-testid="stChatMessage"] img {
-        border-radius: 50%;
-        border: 1px solid rgba(255, 75, 75, 0.5);
+    .stButton>button:hover {
+        background: rgba(255, 75, 75, 0.3) !important;
+        box-shadow: 0 0 20px rgba(255, 75, 75, 0.4);
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. ПОДКЛЮЧЕНИЕ
+# 2. ПОДКЛЮЧЕНИЕ К БД
 @st.cache_resource
 def init_db():
     try:
@@ -73,50 +68,22 @@ gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "app_state" not in st.session_state:
     st.session_state.app_state = "welcome"
 
-# 3. ЛОГИКА
+# 3. ЛОГИКА ЭКРАНОВ
 if st.session_state.app_state == "welcome":
-    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='welcome-card'><h1>ХУАН</h1><p>Система готова ⚡️</p></div>", unsafe_allow_html=True)
-    if st.button("АКТИВИРОВАТЬ"):
-        st.session_state.app_state = "user_select"
-        st.rerun()
-
-elif st.session_state.app_state == "chat":
-    # --- НОВЫЙ СТИЛЬНЫЙ ХЕДЕР С АВАТАРКОЙ ---
-    st.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px;">
-            <img src="https://i.yapx.ru/Yif9K.jpg" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
-            <div style="text-align: left;">
-                <div style="color: #ff4b4b; font-size: 14px; font-weight: 600; letter-spacing: 1px;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 10px; opacity: 0.8;">● ONLINE</div>
-            </div>
+    st.markdown("""
+        <div class='welcome-card'>
+            <h1 style='letter-spacing: 5px; color: #ff4b4b;'>JUAN AI</h1>
+            <p style='opacity: 0.6; font-weight: 300;'>Система находится в режиме ожидания...</p>
         </div>
     """, unsafe_allow_html=True)
     
-    if "messages" not in st.session_state: st.session_state.messages = []
-    
-    # Отображение сообщений (без аватарок внутри, чтобы не перегружать)
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]): 
-            st.markdown(m["content"])
-    
-    if p := st.chat_input("Напиши что-нибудь..."):
-        st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"): 
-            st.markdown(p)
-        
-        res = gro_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
-        )
-        ans = res.choices[0].message.content
-        with st.chat_message("assistant"): 
-            st.markdown(ans)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-        
-        if sheet: 
-            sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
-
-    if st.button("Выйти"):
-        st.session_state.app_state = "welcome"
+    if st.button("РАЗБУДИТЬ"):
+        st.session_state.app_state = "user_select"
         st.rerun()
+
+elif st.session_state.app_state == "user_select":
+    st.markdown("<div class='welcome-card'><h3>КТО В СЕТИ?</h3></div>", unsafe_allow_html=True)
+    if users_sheet:
+        u_data = users_sheet.get_all_records()
+        u_names = [u['Name'] for u in u_data]
+        t1, t2 = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
