@@ -5,7 +5,7 @@ from groq import Groq
 from datetime import datetime
 
 # ПРЯМАЯ ССЫЛКА (надежная из Midjourney)
-USER_PHOTO = "hhttps://r2.syntx.ai/mj/5069746049/single-7585790-1.png"
+USER_PHOTO = "https://r2.syntx.ai/mj/5069746049/single-7585790-1.png"
 
 # 1. ДИЗАЙН
 st.set_page_config(page_title="Cipher", layout="centered")
