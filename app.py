@@ -81,62 +81,41 @@ if st.session_state.app_state == "welcome":
         st.session_state.app_state = "user_select"
         st.rerun()
 
-elif st.session_state.app_state == "user_select":
-    st.markdown("<div class='welcome-card'><h3>Кто здесь? 👤</h3></div>", unsafe_allow_html=True)
-    if users_sheet:
-        u_data = users_sheet.get_all_records()
-        u_names = [u['Name'] for u in u_data]
-        t1, t2 = st.tabs(["Вход", "Создать профиль"])
-        with t1:
-            if u_names:
-                sel_u = st.selectbox("Выбери профиль:", u_names)
-                if st.button("Войти"):
-                    curr = next(i for i in u_data if i["Name"] == sel_u)
-                    st.session_state.u_name, st.session_state.u_bio = curr['Name'], curr['Bio']
-                    st.session_state.app_state = "hero_select"
-                    st.rerun()
-        with t2:
-            new_n = st.text_input("Никнейм")
-            new_b = st.text_area("О себе")
-            if st.button("Зарегистрироваться"):
-                if new_n:
-                    users_sheet.append_row([new_n, new_b])
-                    st.session_state.u_name, st.session_state.u_bio = new_n, new_b
-                    st.session_state.app_state = "hero_select"
-                    st.rerun()
-
-elif st.session_state.app_state == "hero_select":
-    st.markdown(f"<div class='welcome-card'><h3>Привет, {st.session_state.u_name} 👋</h3></div>", unsafe_allow_html=True)
-    if settings_sheet:
-        heroes = settings_sheet.get_all_records()
-        sel_h = st.selectbox("С кем общаемся?", [h['Name'] for h in heroes])
-        if st.button("Начать"):
-            h = next(i for i in heroes if i["Name"] == sel_h)
-            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ВАЖНО: Используй эмодзи."
-            st.session_state.current_name = h['Name']
-            st.session_state.app_state = "chat"
-            st.rerun()
-
 elif st.session_state.app_state == "chat":
-    st.markdown(f"<div style='text-align:center; color:#ff4b4b; font-size:12px;'>● {st.session_state.current_name.upper()}</div>", unsafe_allow_html=True)
+    # --- НОВЫЙ СТИЛЬНЫЙ ХЕДЕР С АВАТАРКОЙ ---
+    st.markdown(f"""
+        <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px;">
+            <img src="https://i.yapx.ru/Yif9K.jpg" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
+            <div style="text-align: left;">
+                <div style="color: #ff4b4b; font-size: 14px; font-weight: 600; letter-spacing: 1px;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 10px; opacity: 0.8;">● ONLINE</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
     if "messages" not in st.session_state: st.session_state.messages = []
     
+    # Отображение сообщений (без аватарок внутри, чтобы не перегружать)
     for m in st.session_state.messages:
-        av = USER_AVATAR if m["role"] == "user" else BOT_AVATAR
-        with st.chat_message(m["role"], avatar=av): st.markdown(m["content"])
+        with st.chat_message(m["role"]): 
+            st.markdown(m["content"])
     
     if p := st.chat_input("Напиши что-нибудь..."):
         st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user", avatar=USER_AVATAR): st.markdown(p)
+        with st.chat_message("user"): 
+            st.markdown(p)
         
         res = gro_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
         )
         ans = res.choices[0].message.content
-        with st.chat_message("assistant", avatar=BOT_AVATAR): st.markdown(ans)
+        with st.chat_message("assistant"): 
+            st.markdown(ans)
         st.session_state.messages.append({"role": "assistant", "content": ans})
-        if sheet: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
+        
+        if sheet: 
+            sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
 
     if st.button("Выйти"):
         st.session_state.app_state = "welcome"
