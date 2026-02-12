@@ -4,8 +4,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# Прямая ссылка на фото (проверь, чтобы она открывалась в браузере как картинка)
-USER_PHOTO = "https://i.yapx.ru/Yif9K.jpg"
+# ПРЯМАЯ ССЫЛКА (PostImages - обычно работает лучше всех)
+USER_PHOTO = "https://cdn.midjourney.com/u/3e5aa158-179e-48aa-88b0-bbef6bb9e7a0/0e909883da6dc88b440ea65fc9c9249352270c36a3b71af9f7744cf2b3d43381.png
 
 # 1. ДИЗАЙН
 st.set_page_config(page_title="Cipher", layout="centered")
@@ -24,37 +24,39 @@ st.markdown("""
     .welcome-card {
         background: rgba(36, 47, 61, 0.2);
         backdrop-filter: blur(20px);
-        padding: 30px;
-        border-radius: 30px;
-        border: 1px solid rgba(255, 0, 0, 0.3);
+        padding: 25px;
+        border-radius: 25px;
+        border: 1px solid rgba(255, 75, 75, 0.3);
         text-align: center;
-        margin-top: 50px;
+        margin-top: 30px;
     }
-    /* Кнопки */
     .stButton>button {
         width: 100%;
         background: rgba(255, 75, 75, 0.1) !important;
         border: 1px solid rgba(255, 75, 75, 0.6) !important;
         color: white !important;
-        border-radius: 15px;
-        padding: 10px;
+        border-radius: 12px;
+        padding: 8px;
         font-weight: 600;
-        margin-top: 10px;
     }
-    /* УБИРАЕМ АРТ И ФЕЙС (скрываем дефолтные аватарки полностью) */
-    [data-testid="stChatMessage"] [data-testid="stAvatar"] { display: none !important; }
-    [data-testid="stChatMessage"] { padding-left: 0 !important; }
-    
+    /* ЖЕСТКОЕ УДАЛЕНИЕ FACE И ART */
+    [data-testid="stChatMessage"] [data-testid="stAvatar"] {
+        display: none !important;
+    }
+    [data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] p {
+        margin-bottom: 0 !important;
+    }
     /* Компактный хедер */
     .chat-header {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 15px;
-        padding: 15px;
+        padding: 12px;
         background: rgba(255, 255, 255, 0.03);
         border-radius: 20px;
         border: 1px solid rgba(255, 75, 75, 0.2);
-        margin-bottom: 25px;
+        margin-bottom: 20px;
         width: fit-content;
         margin-left: auto;
         margin-right: auto;
@@ -72,8 +74,7 @@ def init_db():
         )
         client = gspread.authorize(creds).open("Juan")
         return client.get_worksheet(0), client.worksheet("Settings"), client.worksheet("Users")
-    except:
-        return None, None, None
+    except: return None, None, None
 
 sheet, settings_sheet, users_sheet = init_db()
 gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -83,7 +84,7 @@ if "app_state" not in st.session_state:
 
 # 3. ЛОГИКА
 if st.session_state.app_state == "welcome":
-    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b; letter-spacing: 3px;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='welcome-card'><h1 style='color: #ff4b4b;'>JUAN AI</h1><p>Система в режиме ожидания...</p></div>", unsafe_allow_html=True)
     if st.button("РАЗБУДИТЬ"):
         st.session_state.app_state = "user_select"
         st.rerun()
@@ -100,15 +101,17 @@ elif st.session_state.app_state == "user_select":
     tab_login, tab_reg = st.tabs(["ВХОД", "РЕГИСТРАЦИЯ"])
     with tab_login:
         if u_names:
-            sel_u = st.selectbox("Твой профиль:", u_names, key="login_sel")
-            if st.button("ПОДТВЕРДИТЬ ВХОД"):
+            sel_u = st.selectbox("Выбери профиль:", u_names, key="login_dropdown")
+            if st.button("ВОЙТИ", key="login_btn"):
                 st.session_state.u_name = sel_u
                 st.session_state.app_state = "hero_select"
                 st.rerun()
+        else: st.write("Нет активных профилей.")
+
     with tab_reg:
-        new_n = st.text_input("Никнейм", key="reg_n")
-        new_b = st.text_area("Пару слов о тебе", key="reg_b")
-        if st.button("СОЗДАТЬ И ВОЙТИ"):
+        new_n = st.text_input("Имя нового парня", key="new_user_name")
+        new_b = st.text_area("О нем", key="new_user_bio")
+        if st.button("СОЗДАТЬ ПРОФИЛЬ", key="reg_btn"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
@@ -120,49 +123,44 @@ elif st.session_state.app_state == "hero_select":
     if settings_sheet:
         h_data = settings_sheet.get_all_records()
         h_names = [h['Name'] for h in h_data]
-        sel_h = st.selectbox("С кем общаемся?", h_names, key="h_sel")
+        sel_h = st.selectbox("С кем на связи?", h_names, key="hero_dropdown")
         if st.button("УСТАНОВИТЬ СОЕДИНЕНИЕ"):
             h = next(i for i in h_data if i["Name"] == sel_h)
-            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}."
+            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ПИШИ С ЭМОДЗИ! ⚡️✨"
             st.session_state.current_name = h['Name']
             st.session_state.app_state = "chat"
             st.rerun()
 
 elif st.session_state.app_state == "chat":
-    # НОВЫЙ КОМПАКТНЫЙ ХЕДЕР: ФОТО СБОКУ ОТ ИМЕНИ
     st.markdown(f"""
         <div class="chat-header">
             <img src="{USER_PHOTO}" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #ff4b4b; object-fit: cover;">
             <div style="text-align: left;">
-                <div style="color: #ff4b4b; font-size: 18px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 10px; letter-spacing: 1px;">● В СЕТИ</div>
+                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 10px;">● В СЕТИ</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
     
     if "messages" not in st.session_state: st.session_state.messages = []
     
-    # Чат с иконками без текста "art/face"
     for m in st.session_state.messages:
         icon = "👤" if m["role"] == "user" else "✨"
         with st.chat_message(m["role"]):
-            st.markdown(f"**{icon}** {m['content']}")
+            st.markdown(f"{icon} {m['content']}")
     
-    if p := st.chat_input("Напиши сообщение..."):
+    if p := st.chat_input("Напиши сообщение... 💭"):
         st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"):
-            st.markdown(f"**👤** {p}")
+        with st.chat_message("user"): st.markdown(f"👤 {p}")
         
         res = gro_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
         )
         ans = res.choices[0].message.content
-        with st.chat_message("assistant"):
-            st.markdown(f"**✨** {ans}")
+        with st.chat_message("assistant"): st.markdown(f"✨ {ans}")
         st.session_state.messages.append({"role": "assistant", "content": ans})
-        
-        if sheet:
+        if sheet: 
             try: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
             except: pass
 
