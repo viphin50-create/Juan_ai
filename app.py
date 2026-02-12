@@ -8,9 +8,8 @@ from datetime import datetime
 USER_AVATAR = "https://iimg.su/i/7LggqS"
 BOT_AVATAR = "✨"
 
-# 1. ДИЗАЙН (Montserrat + Neon)
+# 1. ДИЗАЙН
 st.set_page_config(page_title="Cipher", layout="centered")
-
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 
 st.markdown("""
@@ -55,7 +54,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. ПОДКЛЮЧЕНИЕ К БД
+# 2. ПОДКЛЮЧЕНИЕ
 @st.cache_resource
 def init_db():
     try:
@@ -74,7 +73,7 @@ gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "app_state" not in st.session_state:
     st.session_state.app_state = "welcome"
 
-# 3. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ЭКРАНОВ
+# 3. ЛОГИКА
 if st.session_state.app_state == "welcome":
     st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
     st.markdown("<div class='welcome-card'><h1>ХУАН</h1><p>Система готова ⚡️</p></div>", unsafe_allow_html=True)
@@ -113,7 +112,7 @@ elif st.session_state.app_state == "hero_select":
         sel_h = st.selectbox("С кем общаемся?", [h['Name'] for h in heroes])
         if st.button("Начать"):
             h = next(i for i in heroes if i["Name"] == sel_h)
-            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ВАЖНО: Используй эмодзи и живой язык."
+            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. ВАЖНО: Используй эмодзи."
             st.session_state.current_name = h['Name']
             st.session_state.app_state = "chat"
             st.rerun()
@@ -131,4 +130,14 @@ elif st.session_state.app_state == "chat":
         with st.chat_message("user", avatar=USER_AVATAR): st.markdown(p)
         
         res = gro_client.chat.completions.create(
-            model="llama-3.3-
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
+        )
+        ans = res.choices[0].message.content
+        with st.chat_message("assistant", avatar=BOT_AVATAR): st.markdown(ans)
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+        if sheet: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
+
+    if st.button("Выйти"):
+        st.session_state.app_state = "welcome"
+        st.rerun()
