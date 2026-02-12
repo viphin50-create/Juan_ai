@@ -130,4 +130,49 @@ elif st.session_state.app_state == "hero_select":
                 st.rerun()
     else:
         if st.button("ВОЙТИ В ЧАТ"):
-            h = next(i for i in heroes if i["Name"] == h
+            h = next(i for i in heroes if i["Name"] == h_choice)
+            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. Романтика, LGBT+, эмодзи."
+            st.session_state.current_name = h['Name']
+            st.session_state.app_state = "chat"
+            st.rerun()
+    
+    if st.button("⬅ Назад"):
+        st.session_state.app_state = "welcome"
+        st.rerun()
+
+# ШАГ 3: ЧАТ
+elif st.session_state.app_state == "chat":
+    st.markdown(f"""
+        <div class="chat-header">
+            <div style="width: 40px; height: 40px; background: #ff4b4b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">{st.session_state.current_name[0]}</div>
+            <div style="text-align: left;">
+                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
+                <div style="color: #00ff00; font-size: 10px;">● В СЕТИ</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if "messages" not in st.session_state: st.session_state.messages = []
+    
+    for m in st.session_state.messages:
+        icon = "👤" if m["role"] == "user" else "✨"
+        with st.chat_message(m["role"]): st.markdown(f"**{icon}** {m['content']}")
+    
+    if p := st.chat_input("Напиши сообщение..."):
+        st.session_state.messages.append({"role": "user", "content": p})
+        with st.chat_message("user"): st.markdown(f"**👤** {p}")
+        
+        res = gro_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
+        )
+        ans = res.choices[0].message.content
+        with st.chat_message("assistant"): st.markdown(f"**✨** {ans}")
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+        if sheet:
+            try: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
+            except: pass
+
+    if st.button("ЗАВЕРШИТЬ СЕАНС"):
+        st.session_state.app_state = "welcome"
+        st.rerun()
