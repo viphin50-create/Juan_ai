@@ -4,7 +4,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from groq import Groq
 from datetime import datetime
 
-# 1. ДИЗАЙН (Montserrat + Жесткая чистка)
+# 1. ДИЗАЙН (Минимализм + Чистка)
 st.set_page_config(page_title="Cipher", layout="centered")
 
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">', unsafe_allow_html=True)
@@ -20,41 +20,38 @@ st.markdown("""
         color: white !important;
     }
     
-    /* УНИЧТОЖАЕМ FACE И ART НА КОРНЮ */
+    /* УНИЧТОЖАЕМ FACE И ART */
     [data-testid="stAvatar"] { display: none !important; }
     div[data-testid="stChatMessage"] section div { font-size: 0 !important; }
     div[data-testid="stChatMessage"] section div * { font-size: 16px !important; }
 
-    /* Компактные кнопки */
+    /* Компактные кнопки и инпуты */
     .stButton>button {
-        width: auto !important;
-        min-width: 150px;
+        width: 100% !important;
         background: transparent !important;
-        border: 1px solid rgba(255, 75, 75, 0.6) !important;
+        border: 1px solid rgba(255, 75, 75, 0.5) !important;
         color: white !important;
         border-radius: 8px !important;
-        margin: 5px 0;
+        height: 45px !important;
     }
-    
-    /* Убираем гигантские фоны */
-    .stSelectbox, .stTextInput, .stTextArea { margin-bottom: 10px !important; }
+    .stSelectbox, .stTextInput, .stTextArea { margin-bottom: 5px !important; }
     
     /* Хедер чата */
     .chat-header {
         display: flex;
         align-items: center;
-        gap: 15px;
-        padding: 10px;
+        gap: 12px;
+        padding: 10px 20px;
         background: rgba(255, 255, 255, 0.05);
-        border-radius: 40px;
-        border: 1px solid rgba(255, 75, 75, 0.3);
+        border-radius: 30px;
+        border: 1px solid rgba(255, 75, 75, 0.2);
         width: fit-content;
         margin: 0 auto 20px auto;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. ПОДКЛЮЧЕНИЕ К БД
+# 2. ПОДКЛЮЧЕНИЕ
 @st.cache_resource
 def init_db():
     try:
@@ -72,12 +69,13 @@ gro_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "app_state" not in st.session_state: st.session_state.app_state = "welcome"
 if "u_name" not in st.session_state: st.session_state.u_name = None
 
-# 3. ЦЕНТРАЛЬНАЯ ЛОГИКА
 st.markdown("<h2 style='text-align:center; color:#ff4b4b; letter-spacing:5px;'>JUAN AI</h2>", unsafe_allow_html=True)
 
-# ШАГ 1: ВЫБОР ИЛИ СОЗДАНИЕ ТЕБЯ
+# 3. ЛОГИКА ШАГОВ
+
+# ШАГ 1: КТО ТЫ?
 if st.session_state.app_state == "welcome":
-    st.write("👤 **ШАГ 1: КТО ТЫ?**")
+    st.write("👤 **ШАГ 1: ВЫБЕРИ СЕБЯ**")
     
     u_names = []
     if users_sheet:
@@ -86,80 +84,50 @@ if st.session_state.app_state == "welcome":
             u_names = [u['Name'] for u in u_data]
         except: pass
 
-    if u_names:
-        sel_u = st.selectbox("Выбрать существующий профиль:", u_names)
-        if st.button("ВЫБРАТЬ"):
-            st.session_state.u_name = sel_u
-            st.session_state.app_state = "hero_select"
-            st.rerun()
-    
-    with st.expander("Создать новый профиль"):
-        new_n = st.text_input("Имя")
-        new_b = st.text_area("О себе")
-        if st.button("СОЗДАТЬ"):
+    # Объединяем список и опцию "Создать нового"
+    options = u_names + ["+ Создать новый профиль"]
+    choice = st.selectbox("Твой аккаунт:", options, index=0 if u_names else 0)
+
+    if choice == "+ Создать новый профиль":
+        new_n = st.text_input("Как тебя называть?")
+        new_b = st.text_area("Пару слов о тебе")
+        if st.button("ЗАРЕГИСТРИРОВАТЬ"):
             if new_n and users_sheet:
                 users_sheet.append_row([new_n, new_b])
                 st.session_state.u_name = new_n
                 st.session_state.app_state = "hero_select"
                 st.rerun()
+    else:
+        if st.button("ВЫБРАТЬ"):
+            st.session_state.u_name = choice
+            st.session_state.app_state = "hero_select"
+            st.rerun()
 
-# ШАГ 2: ВЫБОР ИЛИ СОЗДАНИЕ ПАРТНЕРА
+# ШАГ 2: ВЫБЕРИ ПАРТНЕРА
 elif st.session_state.app_state == "hero_select":
-    st.markdown(f"<p style='text-align:center;'>Привет, <b>{st.session_state.u_name}</b>!</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center;'>Привет, {st.session_state.u_name}!</p>", unsafe_allow_html=True)
     st.write("🎯 **ШАГ 2: ВЫБЕРИ ПАРТНЕРА**")
     
+    h_names = []
     if settings_sheet:
-        heroes = settings_sheet.get_all_records()
-        h_names = [h['Name'] for h in heroes]
-        
-        sel_h = st.selectbox("Из готового списка:", h_names)
-        if st.button("ВОЙТИ В ЧАТ"):
-            h = next(i for i in heroes if i["Name"] == sel_h)
-            st.session_state.persona = f"Ты {h['Name']}. {h['Prompt']}. Собеседник: {st.session_state.u_name}. Романтика, LGBT+, эмодзи."
-            st.session_state.current_name = h['Name']
-            st.session_state.app_state = "chat"
-            st.rerun()
-            
-    with st.expander("Создать нового партнера"):
-        new_h_n = st.text_input("Имя персонажа")
-        new_h_p = st.text_area("Промпт/Характер")
-        if st.button("СОЗДАТЬ И ВЫБРАТЬ"):
+        try:
+            heroes = settings_sheet.get_all_records()
+            h_names = [h['Name'] for h in heroes]
+        except: pass
+
+    h_options = h_names + ["+ Создать нового партнера"]
+    h_choice = st.selectbox("С кем на связь?", h_options)
+
+    if h_choice == "+ Создать нового партнера":
+        new_h_n = st.text_input("Имя партнера")
+        new_h_p = st.text_area("Промпт (характер)")
+        if st.button("СОЗДАТЬ И ВОЙТИ"):
             if new_h_n and settings_sheet:
                 settings_sheet.append_row([new_h_n, new_h_p])
-                st.success("Готово! Выбери его теперь в списке выше.")
+                st.session_state.persona = f"Ты {new_h_n}. {new_h_p}. Собеседник: {st.session_state.u_name}. Романтика, LGBT+, эмодзи."
+                st.session_state.current_name = new_h_n
+                st.session_state.app_state = "chat"
                 st.rerun()
-
-# ШАГ 3: ЧАТ
-elif st.session_state.app_state == "chat":
-    st.markdown(f"""
-        <div class="chat-header">
-            <div style="width: 40px; height: 40px; background: #ff4b4b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">{st.session_state.current_name[0]}</div>
-            <div style="text-align: left;">
-                <div style="color: #ff4b4b; font-size: 16px; font-weight: 600;">{st.session_state.current_name.upper()}</div>
-                <div style="color: #00ff00; font-size: 10px;">● В СЕТИ</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if "messages" not in st.session_state: st.session_state.messages = []
-    
-    for m in st.session_state.messages:
-        icon = "👤" if m["role"] == "user" else "✨"
-        with st.chat_message(m["role"]): st.markdown(f"**{icon}** {m['content']}")
-    
-    if p := st.chat_input("Напиши что-нибудь..."):
-        st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("user"): st.markdown(f"**👤** {p}")
-        
-        res = gro_client.chat.completions.create(
-            model="llama-3.3-70b-versatile", 
-            messages=[{"role": "system", "content": st.session_state.persona}] + st.session_state.messages
-        )
-        ans = res.choices[0].message.content
-        with st.chat_message("assistant"): st.markdown(f"**✨** {ans}")
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-        if sheet: sheet.append_row([datetime.now().strftime("%H:%M"), st.session_state.current_name, p, ans[:200]])
-
-    if st.button("ЗАВЕРШИТЬ СЕАНС"):
-        st.session_state.app_state = "welcome"
-        st.rerun()
+    else:
+        if st.button("ВОЙТИ В ЧАТ"):
+            h = next(i for i in heroes if i["Name"] == h
